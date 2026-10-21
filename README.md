@@ -38,10 +38,11 @@ Three steps, and you do not need to know OpenTofu for any of them.
 2. **Open a pull request.** The Validate job checks the shape of your file,
    the names it refers to, and the rules that are not about shape. It takes
    seconds and holds no credentials.
-3. **Ask for a plan.** Somebody with write access comments `/plan` on a branch
-   of this repository. A bot replies with the exact list of changes. A core team
-   member approves the pull request, and after the merge a second one releases
-   the apply.
+3. **Read the plan.** A bot comments the exact list of changes on the pull
+   request, in a dropdown, as soon as it is out of draft and again on every
+   push. Anybody with write access can comment `/plan` to run it again. A core
+   team member approves the pull request, and after the merge a second one
+   releases the apply.
 
 Two humans see every change, and both of them see the plan first.
 
