@@ -1,12 +1,34 @@
 # The plan, posted as a pull request comment.
 #
+# Two ways in. A pull request from a branch of this repository is planned
+# automatically, on open and on every push after that. Anybody with write
+# access can also comment `/plan` to ask again -- on a draft, on a change
+# outside the paths below, or when the last answer has gone stale. Pull
+# requests from forks are refused either way.
+#
 # A plan executes the configuration in a job holding a token and the state
-# credentials, so pull requests from forks are refused outright. An
-# issue_comment workflow always runs the default-branch version of this file,
-# so a fork cannot change these rules by editing it.
+# credentials, which is why a fork never reaches it. The `issue_comment`
+# trigger always runs the default-branch version of this file, so a fork
+# cannot change these rules by editing it. The `pull_request` trigger does run
+# the branch's version of it -- but only somebody with push access to this
+# repository can put a branch here, and they could have commented `/plan`
+# anyway, so that path grants nothing that was not already granted.
 name: Plan
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    # The same paths as Apply: the files that can change the organisation. A
+    # README-only pull request does not need a plan, and `/plan` still works
+    # there if somebody wants one. Path filters apply to this event only, not
+    # to `issue_comment`.
+    paths:
+      - "org/**"
+      - "repos/**"
+      - "teams/**"
+      - "people/**"
+      - "tofu/**"
   issue_comment:
     types: [created]
 
@@ -18,15 +40,26 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # One plan per pull request. A second /plan cancels the first, because the
-  # answer from the older one is already out of date.
-  group: plan-${{ github.event.issue.number }}
+  # One plan per pull request, whichever trigger started it. A second plan
+  # cancels the first, because the answer from the older one is already out of
+  # date.
+  group: plan-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   authorise:
     name: Check who asked
-    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/plan')
+    # A pull request from a branch of this repository, or `/plan` from
+    # somebody the next step checks. Draft pull requests are not planned
+    # automatically -- `ready_for_review` above picks them up when they are
+    # marked ready, and `/plan` works on a draft in the meantime.
+    if: >-
+      (github.event_name == 'pull_request'
+        && github.event.pull_request.draft == false
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && startsWith(github.event.comment.body, '/plan'))
     runs-on: ubuntu-latest
     outputs:
       allowed: ${{ steps.check.outputs.allowed }}
@@ -36,6 +69,20 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            // Default to false; set true only after every gate below passes.
+            core.setOutput("allowed", "false");
+
+            // A pull_request event on a branch of this repository. Whoever
+            // pushed the branch already had write access, so there is nobody
+            // left to check. Forks do not reach here: the job-level `if`
+            // drops them, and this event would hold no credentials for them
+            // in any case.
+            if (context.eventName === "pull_request") {
+              core.setOutput("sha", context.payload.pull_request.head.sha);
+              core.setOutput("allowed", "true");
+              return;
+            }
+
             // author_association on the comment is not enough: it reports
             // MEMBER for anyone in the organisation, including someone with
             // read access only. Ask the API what they can actually do.
@@ -44,8 +91,6 @@ jobs:
               repo: context.repo.repo,
               username: context.payload.comment.user.login,
             });
-            // Default to false; set true only after every gate below passes.
-            core.setOutput("allowed", "false");
 
             if (!["admin", "write", "maintain"].includes(perm.permission)) {
               await github.rest.issues.createComment({
@@ -209,7 +254,7 @@ jobs:
               "```",
               "\n</details>",
               "",
-              `Planned from \`${process.env.PLANNED_SHA}\`.`,
+              `Planned from \`${process.env.PLANNED_SHA}\`. Comment \`/plan\` to run it again.`,
             ].join("\n");
 
             // Update the previous comment rather than adding another, so the

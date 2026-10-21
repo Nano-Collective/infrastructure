@@ -27,9 +27,13 @@ file against its schema, checks that every name refers to something that
 exists, applies the rules a schema cannot express, and asks the docs site
 whether the whitepaper you named has been approved. It holds no credentials.
 
-**Plan** runs when somebody with write access comments `/plan`, and only on a
-branch of this repository. It does not run automatically, and **it does not run
-on pull requests from forks at all**.
+**Plan** runs by itself on a pull request from a branch of this repository,
+once it is out of draft and again on every push. A bot comments the exact list
+of changes, folded into a dropdown, and edits that same comment next time
+rather than adding another. Somebody with write access can comment `/plan` to
+run it again — on a draft, or on a change outside `org/`, `repos/`, `teams/`,
+`people/` and `tofu/`, where it does not start on its own. **It does not run on
+pull requests from forks at all.**
 
 The reason is worth understanding, because it is the one real security boundary
 here. A plan executes this repository's configuration: `tofu init` fetches
