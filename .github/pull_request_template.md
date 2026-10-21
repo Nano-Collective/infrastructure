@@ -19,5 +19,7 @@
 
 ## Plan
 
-<!-- Comment /plan once this is ready. A reviewer should read the plan, not
-     just the diff. Paste anything from it that deserves attention. -->
+<!-- A plan is commented here automatically once this is out of draft, and
+     again on every push. A reviewer should read the plan, not just the diff.
+     Paste anything from it that deserves attention. Comment /plan to run it
+     again. -->
