@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discord
+    url: https://discord.gg/ktPDV6rekE
+    about: Quicker for a question than an issue is.
+  - name: How a project comes to life
+    url: https://docs.nanocollective.org/collective/projects/how-a-project-comes-to-life
+    about: The route from an idea to a repository. Read this before asking for one.

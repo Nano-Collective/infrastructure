@@ -1,0 +1,18 @@
+# Copy to backend_override.tf for a local dry run.
+#
+# OpenTofu reads any file ending in _override.tf last and lets it replace a
+# block defined elsewhere, so this swaps R2 for a state file on disk.
+# *_override.tf is gitignored.
+#
+#   cp backend_override.tf.example backend_override.tf
+#   tofu init -reconfigure
+#   GITHUB_TOKEN=$(gh auth token) tofu plan
+#
+# Plan locally, apply in CI. An apply from a laptop writes a local state file
+# that CI knows nothing about, and the next CI apply tries to undo it.
+
+terraform {
+  backend "local" {
+    path = "local.tfstate"
+  }
+}

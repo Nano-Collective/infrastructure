@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nano-Collective/infrastructure/schema/person.schema.json",
+  "title": "Person",
+  "description": "One file per organisation member. Deleting a file removes that person from the organisation, so a removal is its own pull request and reads as one.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["github", "org_role", "teams"],
+  "properties": {
+    "github": {
+      "description": "GitHub login, exactly as GitHub spells it, including capitals.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$"
+    },
+    "name": { "type": "string" },
+    "org_role": {
+      "description": "An owner can change anything, including this repository's own rulesets. Keep the number small and say why each one is there.",
+      "enum": ["member", "owner"]
+    },
+    "owner_reason": { "type": "string", "minLength": 10 },
+    "teams": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["team", "role"],
+        "properties": {
+          "team": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "role": { "enum": ["member", "maintainer"] }
+        }
+      }
+    }
+  }
+}

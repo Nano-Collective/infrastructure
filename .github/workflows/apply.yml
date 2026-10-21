@@ -1,0 +1,165 @@
+# Apply, after a merge, behind a human.
+#
+# Merging does not apply: the job queues against the `production` environment,
+# which lists the core team as required reviewers. The apply runs the saved
+# plan rather than a fresh one, so it applies what the reviewer read.
+#
+# `production` holds NC_INFRA_APPLY_* and nothing else. Every other secret --
+# NC_INFRA_PLAN_*, R2_*, CLOUDFLARE_ACCOUNT_ID -- is a repository secret,
+# because reading is not what needs gating.
+name: Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "org/**"
+      - "repos/**"
+      - "teams/**"
+      - "people/**"
+      - "tofu/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Everything that writes state shares this group, including the nightly drift
+  # check. R2 has no DynamoDB, so the state lock is an object with a conditional
+  # PUT; this group means two applies cannot overlap even if that failed open.
+  group: tofu-state
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    # workflow_dispatch can be fired on any branch. Without this a branch's own
+    # configuration gets planned, and then queued against `production` for a
+    # human to release with the write credential.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.plan.outputs.changes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Mint a read-only token
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.NC_INFRA_PLAN_APP_ID }}
+          private-key: ${{ secrets.NC_INFRA_PLAN_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      - name: Initialise
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: tofu -chdir=tofu init -input=false
+
+      - name: Plan
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -o pipefail
+          if tofu -chdir=tofu plan -input=false -no-color -detailed-exitcode -out=apply.tfplan | tee /tmp/plan.txt; then
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+          else
+            code=$?
+            [ "$code" = "2" ] || exit "$code"
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The reviewer approving the deployment needs to see what they are
+      # approving without opening another tab.
+      - name: Write the plan to the job summary
+        if: always()
+        run: |
+          {
+            echo "### Plan"
+            echo
+            echo '```terraform'
+            cat /tmp/plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A saved plan is a zip holding the resource diff, a copy of state, every
+      # .tf file in the directory, the backend configuration, and a table of
+      # every variable value in plaintext; `sensitive = true` governs CLI
+      # output, not serialisation. On a public repository anybody can download
+      # this artifact. Nothing in it is a secret only because of two rules kept
+      # elsewhere: no credential is passed as a variable (tofu/providers.tf),
+      # and the R2 endpoint comes from the environment (tofu/backend.tf).
+      - name: Keep the plan for the apply
+        if: steps.plan.outputs.changes == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tfplan
+          path: tofu/apply.tfplan
+          retention-days: 1
+
+  apply:
+    name: Apply
+    needs: plan
+    if: needs.plan.outputs.changes == 'true'
+    runs-on: ubuntu-latest
+    # The gate. Core team are the required reviewers on this environment.
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: tfplan
+          path: tofu
+
+      - name: Mint a read-write token
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.NC_INFRA_APPLY_APP_ID }}
+          private-key: ${{ secrets.NC_INFRA_APPLY_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      - name: Initialise
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: tofu -chdir=tofu init -input=false
+
+      # The saved file, not a fresh plan. This applies what the reviewer read
+      # and refuses if state has moved underneath it.
+      - name: Apply
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: tofu -chdir=tofu apply -input=false -no-color apply.tfplan
+
+      # Catches the case where an apply half succeeded: some resources changed,
+      # some failed, and the organisation is now neither the old thing nor the
+      # new one.
+      - name: Confirm the organisation now matches
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: tofu -chdir=tofu plan -input=false -no-color -detailed-exitcode

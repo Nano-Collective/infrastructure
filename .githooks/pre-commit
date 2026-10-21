@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+#
+# Refuses a commit that stages a credential-bearing file or a token-shaped
+# string. Same check CI runs, so there is one list in one place.
+#
+# Opt in, once per clone:  git config core.hooksPath .githooks
+#
+# Not a gate. `--no-verify` skips it and a fresh clone does not have it. The
+# gate is policy/checks.sh in Validate, and push protection on the repository.
+
+exec ./policy/checks.sh --guard

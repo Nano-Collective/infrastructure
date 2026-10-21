@@ -1,0 +1,38 @@
+name: Repository request
+description: Ask for a new repository under the Nano Collective organisation
+labels: ["repository-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A repository needs an approved whitepaper first, unless it is a small
+        utility on the fast path. See
+        [how a project comes to life](https://docs.nanocollective.org/collective/projects/how-a-project-comes-to-life).
+
+        You are welcome to skip this form and open the pull request directly.
+        One file in `repos/`, and the README has an example.
+  - type: input
+    id: name
+    attributes:
+      label: Repository name
+      description: Short, lowercase, hyphen-separated.
+      placeholder: my-project
+    validations: { required: true }
+  - type: input
+    id: whitepaper
+    attributes:
+      label: Whitepaper slug
+      description: The slug in the docs site. Leave blank if this is a fast-path utility.
+      placeholder: my-project
+  - type: textarea
+    id: description
+    attributes:
+      label: What it does
+      description: One or two sentences, as they would read on the repository page.
+    validations: { required: true }
+  - type: input
+    id: maintainer
+    attributes:
+      label: Who maintains it
+      description: GitHub handles. At least one named person.
+    validations: { required: true }

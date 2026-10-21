@@ -1,0 +1,233 @@
+# The plan, posted as a pull request comment.
+#
+# A plan executes the configuration in a job holding a token and the state
+# credentials, so pull requests from forks are refused outright. An
+# issue_comment workflow always runs the default-branch version of this file,
+# so a fork cannot change these rules by editing it.
+name: Plan
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  # The plan comment, the reaction and the refusal message all go through the
+  # issues API, which needs issues: write even on a pull request.
+  issues: write
+  pull-requests: read
+
+concurrency:
+  # One plan per pull request. A second /plan cancels the first, because the
+  # answer from the older one is already out of date.
+  group: plan-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  authorise:
+    name: Check who asked
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/plan')
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // author_association on the comment is not enough: it reports
+            // MEMBER for anyone in the organisation, including someone with
+            // read access only. Ask the API what they can actually do.
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.payload.comment.user.login,
+            });
+            // Default to false; set true only after every gate below passes.
+            core.setOutput("allowed", "false");
+
+            if (!["admin", "write", "maintain"].includes(perm.permission)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `A plan runs this repository's configuration, so only someone with write access can ask for one. @${context.payload.comment.user.login} has \`${perm.permission}\`.\n\nThe validation checks have already run on this pull request and are the part that matters for review.`,
+              });
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            // Forks are refused: see the top of this file. Forks still get
+            // Validate, which holds no credentials.
+            const head = pr.head.repo?.full_name ?? "(deleted fork)";
+            if (head !== `${context.repo.owner}/${context.repo.repo}`) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `No plan for a pull request from a fork. This one is from \`${head}\`.\n\nA plan runs this repository's configuration, including any module or provider it names, in a job that holds credentials. There is no safe way to do that with a branch this repository does not control, and the validation checks cannot help because a fork can edit those too.\n\nValidate has already run here and is the part that matters for review. If this change should be planned, a maintainer can push these commits to a branch on this repository and comment \`/plan\` there.`,
+              });
+              return;
+            }
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "rocket",
+            });
+
+            // Pinned to the commit this step looked at, so a push landing
+            // between the comment and the checkout is not planned unasked.
+            core.setOutput("sha", pr.head.sha);
+            core.setOutput("allowed", "true");
+
+  plan:
+    name: Plan
+    needs: authorise
+    if: needs.authorise.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit the authorising step pinned.
+          ref: ${{ needs.authorise.outputs.sha }}
+          # Needed by the next step, which reads the default branch.
+          fetch-depth: 0
+
+      # The gate files decide whether the rest is safe, so they come from the
+      # default branch rather than from the branch under test. The lock file is
+      # among them: -lockfile=readonly below refuses to *update* the lock, but it
+      # reads whichever one is on disk, so a branch could otherwise pin its own.
+      - name: Take the gate files from the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git checkout "origin/$DEFAULT_BRANCH" -- \
+            policy/ scripts/ package.json pnpm-lock.yaml tofu/.terraform.lock.hcl
+          git status --short
+
+      - name: Set up PNPM
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: "pnpm"
+      # --ignore-scripts: a postinstall hook would run code on a runner that is
+      # about to hold credentials, and nothing here needs a lifecycle script.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # BASE_REF is what turns on the "new rulesets start at evaluate" check.
+      # Without it that check skips silently.
+      - name: Schema, references and policy
+        env:
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        run: ./policy/checks.sh --offline
+
+      - name: Mint a read-only token
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.NC_INFRA_PLAN_APP_ID }}
+          private-key: ${{ secrets.NC_INFRA_PLAN_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      - name: Initialise
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        # -lockfile=readonly: refuse to update .terraform.lock.hcl. Otherwise a
+        # branch can name a different provider and init downloads and runs it;
+        # a provider plugin is an arbitrary executable.
+        run: tofu -chdir=tofu init -input=false -lockfile=readonly
+
+      # -lock=false: a plan only reads state, and taking the lock would let a
+      # plan block an apply.
+      - name: Plan
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -o pipefail
+          tofu -chdir=tofu plan -input=false -lock=false -no-color -detailed-exitcode \
+            2>&1 | tee /tmp/plan.txt && echo "exitcode=0" >> "$GITHUB_OUTPUT" || {
+              code=$?
+              echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+              [ "$code" = "2" ]
+            }
+
+      - name: Post the plan
+        if: always() && steps.plan.outcome != 'skipped'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EXITCODE: ${{ steps.plan.outputs.exitcode }}
+          PLANNED_SHA: ${{ needs.authorise.outputs.sha }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            let plan = "";
+            try { plan = fs.readFileSync("/tmp/plan.txt", "utf8"); }
+            catch { plan = "The plan produced no output. Read the job log."; }
+
+            // A GitHub comment caps at 65536 characters. Keep the tail, which
+            // is where the summary line lives.
+            const CAP = 60000;
+            const clipped = plan.length > CAP;
+            if (clipped) plan = plan.slice(-CAP);
+
+            const code = process.env.EXITCODE;
+            const heading = code === "0"
+              ? "No changes. The organisation matches the catalogue."
+              : code === "2"
+              ? "This pull request changes the organisation. Read the plan before approving."
+              : "The plan failed. Read the job log.";
+
+            const marker = "<!-- nc-infra-plan -->";
+            const body = [
+              marker,
+              `### ${heading}`,
+              "",
+              clipped ? "_Output was too long for a comment. Only the end is shown; the job log has all of it._\n" : "",
+              "<details><summary>Plan output</summary>\n",
+              "```terraform",
+              plan,
+              "```",
+              "\n</details>",
+              "",
+              `Planned from \`${process.env.PLANNED_SHA}\`.`,
+            ].join("\n");
+
+            // Update the previous comment rather than adding another, so the
+            // pull request does not fill up with stale plans.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }

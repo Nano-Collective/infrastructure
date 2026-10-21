@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nano-Collective/infrastructure/schema/repo.schema.json",
+  "title": "Repository",
+  "description": "One file per repository in the Nano Collective organisation. Validated before OpenTofu sees it, so a bad file fails in seconds with no credentials in play.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "visibility",
+    "default_branch",
+    "features",
+    "merge",
+    "rulesets",
+    "manage_labels",
+    "vulnerability_alerts"
+  ],
+  "properties": {
+    "name": {
+      "description": "Short, lowercase, hyphen-separated, per creating-a-new-project.md. The leading dot is allowed only for the organisation profile repo.",
+      "type": "string",
+      "pattern": "^(\\.github|[a-z0-9]+(-[a-z0-9]+)*)$",
+      "maxLength": 40
+    },
+    "description": {
+      "description": "Shown on the repository page and in search. Required for a public repository: an unexplained repo is a repo nobody contributes to.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 350
+    },
+    "homepage": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uri"
+    },
+    "visibility": {
+      "enum": [
+        "public",
+        "private"
+      ]
+    },
+    "archived": {
+      "type": "boolean",
+      "default": false
+    },
+    "vulnerability_alerts": {
+      "description": "Dependabot alerts. On for every public repository today, off for the private one, which is the Free plan rather than a choice.",
+      "type": "boolean"
+    },
+    "default_branch": {
+      "type": "string",
+      "default": "main"
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{0,49}$"
+      },
+      "uniqueItems": true
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issues",
+        "projects",
+        "wiki",
+        "discussions"
+      ],
+      "properties": {
+        "issues": {
+          "type": "boolean"
+        },
+        "projects": {
+          "type": "boolean"
+        },
+        "wiki": {
+          "type": "boolean"
+        },
+        "discussions": {
+          "type": "boolean"
+        }
+      }
+    },
+    "merge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "squash",
+        "merge_commit",
+        "rebase",
+        "auto_merge",
+        "delete_branch_on_merge"
+      ],
+      "properties": {
+        "squash": {
+          "type": "boolean"
+        },
+        "merge_commit": {
+          "type": "boolean"
+        },
+        "rebase": {
+          "type": "boolean"
+        },
+        "auto_merge": {
+          "type": "boolean"
+        },
+        "delete_branch_on_merge": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rulesets": {
+      "description": "Which of the shared rulesets apply. Empty is allowed and means none, which is true of five repositories today.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quality": {
+          "$ref": "#/$defs/ruleset"
+        },
+        "review": {
+          "$ref": "#/$defs/ruleset"
+        }
+      }
+    },
+    "manage_labels": {
+      "type": "boolean"
+    },
+    "whitepaper": {
+      "description": "Slug in the docs manifest. CI fails unless its status reads 'Build approved'.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "whitepaper_exempt": {
+      "description": "Why this repository exists without an approved whitepaper. A human reads this, so it has to say something.",
+      "enum": [
+        "infrastructure",
+        "fast-path",
+        "predates-pipeline"
+      ]
+    }
+  },
+  "$defs": {
+    "ruleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enforcement"
+      ],
+      "properties": {
+        "enforcement": {
+          "description": "A new ruleset starts at 'evaluate' and is flipped to 'active' in a second pull request, once a day of rule-suite results is clean. Enforcing blind makes every open pull request in the repository unmergeable.",
+          "enum": [
+            "active",
+            "evaluate",
+            "disabled"
+          ]
+        },
+        "copilot_code_review": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nano-Collective/infrastructure/schema/team.schema.json",
+  "title": "Team",
+  "description": "One file per GitHub team. A team is how access is granted; no repository names an individual. project-infrastructure.md gives the reason: adding a maintainer should be one membership change, not a pull request against every repository.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slug",
+    "name",
+    "privacy",
+    "repositories"
+  ],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "privacy": {
+      "enum": [
+        "closed",
+        "secret"
+      ]
+    },
+    "parent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "repositories": {
+      "description": "Repository name to permission. Every name must have a file in repos/.",
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "pull",
+          "triage",
+          "push",
+          "maintain",
+          "admin"
+        ]
+      }
+    },
+    "all_repositories": {
+      "description": "One permission, held on every repository in repos/, including ones added later. GitHub has no blanket grant and the Free plan has nothing at the organisation level, so this is expanded per repository at plan time. `repositories` may still name one to hold it at a different permission.",
+      "enum": [
+        "pull",
+        "triage",
+        "push",
+        "maintain",
+        "admin"
+      ]
+    }
+  }
+}

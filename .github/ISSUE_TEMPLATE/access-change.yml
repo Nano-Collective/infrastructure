@@ -1,0 +1,33 @@
+name: Access change
+description: Ask to join a project, or propose a change to who can reach what
+labels: ["access"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Anything that widens access is worth raising here before the pull
+        request, so the reasoning is in public and the pull request is not the
+        first place the conversation happens.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of change
+      options:
+        - Join a project as a code owner
+        - Add someone to the organisation
+        - Remove someone from the organisation
+        - Give a team access to a repository
+        - Make someone an organisation owner
+        - Something else
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What, exactly
+      description: Which person, which team, which repositories.
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+    validations: { required: true }

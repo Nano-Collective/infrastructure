@@ -1,0 +1,46 @@
+# Local state and anything that could carry a credential into the repo.
+#
+# A saved plan records every variable value in plaintext whatever `sensitive`
+# says, and packages every .tf file in the directory including any override.
+*_override.tf
+*_override.tf.json
+override.tf
+override.tf.json
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+plan.json
+.terraform/
+.terraform.lock.hcl.bak
+crash.log
+crash.*.log
+
+# Variables files. Nothing here should carry a credential -- the provider reads
+# GITHUB_TOKEN from the environment -- but this is where one would end up. The
+# generated import ids hold public GitHub ids and are committed on purpose.
+.env
+.env.*
+.envrc
+*.tfvars
+*.auto.tfvars
+*.tfvars.json
+*.auto.tfvars.json
+!tofu/import-ids.auto.tfvars.json
+
+# CLI config, which is where a registry or provider token is stored.
+.terraformrc
+terraform.rc
+.tofurc
+tofu.rc
+
+# Key material.
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+node_modules/
+.DS_Store

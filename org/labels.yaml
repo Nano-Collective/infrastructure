@@ -1,0 +1,91 @@
+# The label set every repository gets once it opts in with manage_labels: true.
+#
+# Opting in deletes any label on that repository not in `base` below or under
+# its name in `extra`. nanocoder alone has 50, so this is done one at a time.
+#
+# Colours follow GitHub's defaults where one exists, so that an issue list in
+# this organisation looks like an issue list anywhere else. Where there is no
+# default, the Tokyo Night palette the collective uses elsewhere applies.
+#
+# Every colour is quoted, and has to be. A bare 5319e7 is scientific notation to
+# a YAML parser and decodes as 53190000000; a bare 008672 decodes as 8672. The
+# validator rejects anything that is not six lowercase hex digits.
+
+base:
+  # The six GitHub creates with every repository. Listed so that managing a
+  # repository does not silently delete them.
+  - name: bug
+    colour: "d73a4a"
+    description: Something is not working
+  - name: documentation
+    colour: "0075ca"
+    description: Improvements or additions to documentation
+  - name: duplicate
+    colour: "cfd3d7"
+    description: This issue or pull request already exists
+  - name: enhancement
+    colour: "a2eeef"
+    description: New feature or request
+  - name: invalid
+    colour: "e4e669"
+    description: This does not look right
+  - name: question
+    colour: "d876e3"
+    description: Further information is requested
+  - name: wontfix
+    colour: "ffffff"
+    description: This will not be worked on
+
+  # Newcomer routing. contributing.md says every project tags issues for
+  # newcomers, so these two are not optional.
+  - name: good first issue
+    colour: "7057ff"
+    description: Good for newcomers
+  - name: help wanted
+    colour: "008672"
+    description: Extra attention is needed
+
+  # nc-review, the automated reviewer, applies exactly one of these.
+  - name: "agent:clean"
+    colour: "1a7f37"
+    description: Automated review found nothing blocking
+  - name: "agent:comments"
+    colour: "9a6700"
+    description: Automated review left comments worth reading
+  - name: "agent:needs-work"
+    colour: "b35900"
+    description: Automated review found something that should be fixed first
+
+# Labels a repository may add on top of the base set without them counting as
+# drift. Keyed by repository name. Anything not listed here and not in `base`
+# is deleted when that repository turns manage_labels on.
+extra:
+  sentinel:
+    - name: "sentinel:accepted"
+      colour: "0e8a16"
+      description: Finding accepted, fix tracked
+    - name: "sentinel:false-positive"
+      colour: "5319e7"
+      description: Not a real finding, suppressed permanently
+    - name: "sentinel:wontfix"
+      colour: "ffffff"
+      description: Real finding, accepted as a risk
+  docs:
+    # One per whitepaper under review, so feedback issues can be filtered.
+    # how-a-project-comes-to-life.md makes this the convention.
+    - name: "whitepaper:agentveil"
+      colour: "bfd4f2"
+    - name: "whitepaper:docs-forest"
+      colour: "bfd4f2"
+    - name: "whitepaper:infrastructure"
+      colour: "bfd4f2"
+    - name: "whitepaper:marketplace"
+      colour: "bfd4f2"
+    - name: "whitepaper:nano-os"
+      colour: "bfd4f2"
+    - name: "whitepaper:nanobench"
+      colour: "bfd4f2"
+    - name: "whitepaper:nanoterm"
+      colour: "bfd4f2"
+    - name: "whitepaper:scriptura"
+      colour: "bfd4f2"

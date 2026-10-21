@@ -1,0 +1,77 @@
+# Shape, policy and the whitepaper gate.
+#
+# The only job a pull request from a fork can start on its own, so it holds no
+# secrets and no credentials.
+name: Validate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The policy check diffs the branch against its base, which needs both
+          # sides.
+          fetch-depth: 0
+
+      - name: Set up PNPM
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      # --ignore-scripts: this job runs a fork's branch, and a postinstall hook
+      # is the shortest path from a dependency to code running on the runner.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Installing the binary runs nothing from the configuration, so it comes
+      # before the policy check, which needs `tofu fmt` on PATH.
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      # Before init. This job runs a fork's branch, so the greps that refuse
+      # provisioners, remote modules and a redirected provider have to come
+      # first -- `tofu init` fetches what the configuration names, and a
+      # provider plugin is an arbitrary executable.
+      #
+      # --offline: no gh token here, so the live organisation read-back and
+      # the secret-name check are skipped. The plan job does those.
+      - name: Schema, references and policy
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./policy/checks.sh --offline
+
+      # -backend=false, because configuring R2 would need a credential and
+      # none of what follows reads state. -lockfile=readonly so a fork cannot
+      # pin a different provider and have validate run it.
+      - name: Initialise without a backend
+        run: tofu -chdir=tofu init -backend=false -input=false -lockfile=readonly
+
+      - name: Check the configuration is well formed
+        run: tofu -chdir=tofu validate
+
+      # Separated because it is the one check that reaches the network, so a
+      # docs site that is briefly down does not read as a bad pull request.
+      # --gate-only, or this step repeats every check the step above ran.
+      - name: Whitepaper gate
+        run: node scripts/validate.mjs --gate-only

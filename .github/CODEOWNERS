@@ -1,0 +1,16 @@
+# This repository decides who can do what across the whole organisation, so it
+# is owned by the core team rather than by individuals. Adding a maintainer is a
+# team membership change, not a pull request against this file.
+
+* @Nano-Collective/core-team
+
+# The gates themselves. Same owners, listed apart so a change here stands out.
+/schema/   @Nano-Collective/core-team
+/policy/   @Nano-Collective/core-team
+/scripts/  @Nano-Collective/core-team
+/.github/  @Nano-Collective/core-team
+/tofu/     @Nano-Collective/core-team
+
+# Who is in the organisation, and who is an owner.
+/people/   @Nano-Collective/core-team
+/teams/    @Nano-Collective/core-team

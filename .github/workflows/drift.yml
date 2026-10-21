@@ -1,0 +1,185 @@
+# Nightly drift check.
+#
+# Asks GitHub every night whether the organisation still matches the catalogue,
+# and reports in public when it does not.
+#
+# It opens or updates one issue rather than one a night, and corrects nothing:
+# somebody changed something by hand and may have had a reason.
+name: Drift
+
+on:
+  schedule:
+    # 03:15 UTC. Before the docs repo archive job at 04:15 and well clear of
+    # the deploys at 00:15, so a failure here is not tangled up with those.
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  # Shared with Apply. A plan taken while an apply is halfway through would
+  # report drift that is about to stop existing.
+  group: tofu-state
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Check for drift
+    # workflow_dispatch can be fired on any branch, and this job holds the
+    # read-write state credentials. Pin it to the default branch so a branch
+    # cannot have its own configuration planned against them.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # policy/checks.sh runs scripts/validate.mjs and scripts/readback.mjs,
+      # which import ajv and yaml. Without these the read-back cannot run.
+      - name: Set up PNPM
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Mint a read-only token
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.NC_INFRA_PLAN_APP_ID }}
+          private-key: ${{ secrets.NC_INFRA_PLAN_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      - name: Initialise
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: tofu -chdir=tofu init -input=false
+
+      - name: Plan
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -o pipefail
+          if tofu -chdir=tofu plan -input=false -lock=false -no-color -detailed-exitcode \
+               2>&1 | tee /tmp/plan.txt; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          else
+            code=$?
+            if [ "$code" = "2" ]; then
+              echo "drift=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "drift=error" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      # What a plan cannot see. github_repository, github_membership and
+      # github_team_repository are managed one at a time, so anything created by
+      # hand is outside OpenTofu's world and a clean plan says nothing about it.
+      #
+      # --require-secrets: here only, a secret that cannot be listed is a
+      # failure rather than a warning. Needs organisation secrets read.
+      - name: Read the organisation back
+        id: readback
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+        run: ./policy/checks.sh --require-secrets 2>&1 | tee -a /tmp/plan.txt
+
+      - name: Open or update the drift issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DRIFT: ${{ steps.plan.outputs.drift }}
+          READBACK: ${{ steps.readback.outcome }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            const TITLE = "Infrastructure drift detected";
+            const MARKER = "<!-- nc-infra-drift -->";
+            const drift = process.env.DRIFT;
+            const readbackFailed = process.env.READBACK === "failure";
+            const clean = drift === "false" && !readbackFailed;
+
+            const { owner, repo } = context.repo;
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", labels: "drift",
+            });
+            const existing = open.find((i) => i.title === TITLE);
+
+            if (clean) {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: existing.number,
+                  body: `${MARKER}\nThe organisation matches the catalogue again as of ${new Date().toISOString()}. Closing.`,
+                });
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: "closed" });
+              }
+              core.info("No drift.");
+              return;
+            }
+
+            let output = "";
+            try { output = fs.readFileSync("/tmp/plan.txt", "utf8"); } catch {}
+            const CAP = 55000;
+            const clipped = output.length > CAP;
+            if (clipped) output = output.slice(-CAP);
+
+            const heading = drift === "error"
+              ? "The drift check could not run. Read the job log."
+              : readbackFailed && drift === "false"
+              ? "The plan is clean, but the organisation holds something no file claims."
+              : "Something in the organisation no longer matches the catalogue.";
+
+            const body = [
+              MARKER,
+              `### ${heading}`,
+              "",
+              "Somebody changed this by hand, and may have had a good reason. Two ways out:",
+              "",
+              "- The change was right. Open a pull request putting it in the catalogue.",
+              "- The change was not. Open a pull request with no changes and let the apply put it back.",
+              "",
+              readbackFailed
+                ? "Where the report says something exists that **no file claims**, only the first way out applies. OpenTofu does not manage what it was never told about, so an empty pull request will not remove it. Either write the file, or undo it by hand in GitHub.\n"
+                : "",
+              "Nothing is corrected automatically. A machine reverting somebody's deliberate change at three in the morning is worse than a drift report.",
+              "",
+              `Last checked ${new Date().toISOString()}. [Job log](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}).`,
+              "",
+              clipped ? "_Output was too long. Only the end is shown; the job log has all of it._\n" : "",
+              "<details><summary>Plan output</summary>\n",
+              "```terraform",
+              output,
+              "```",
+              "\n</details>",
+            ].join("\n");
+
+            if (existing) {
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+              core.info(`Updated issue #${existing.number}.`);
+            } else {
+              const { data } = await github.rest.issues.create({
+                owner, repo, title: TITLE, body, labels: ["drift"],
+              });
+              core.info(`Opened issue #${data.number}.`);
+            }
+
+      - name: Fail the run when there is drift
+        if: steps.plan.outputs.drift != 'false' || steps.readback.outcome == 'failure'
+        run: |
+          echo "The organisation does not match the catalogue. See the drift issue." >&2
+          exit 1

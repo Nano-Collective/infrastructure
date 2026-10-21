@@ -1,0 +1,36 @@
+# Organisation-level settings for the Nano Collective GitHub organisation.
+#
+# Phase A: this records what the organisation is today. Every value here was
+# read back from the API on 2026-10-02. Change one in a pull request and the
+# plan will show exactly what moves.
+
+login: Nano-Collective
+name: "Nano Collective"
+description: >-
+  We're a collective building open-source AI. Our goal is to create powerful, privacy-first tools, developed by the community for the community.
+blog: https://nanocollective.org
+email: hello@nanocollective.org
+
+# Members default to read on every repository. Write access comes from a team
+# grant, which is recorded in teams/, so there is one place to look.
+default_repository_permission: read
+
+# Both of these are wrong for a collective that routes repository creation
+# through this repo, and both are changed in phase B rather than here.
+members_can_create_repositories: true
+members_allowed_repository_creation_type: all
+
+two_factor_requirement_enabled: true
+web_commit_signoff_required: false
+
+# Security defaults for new repositories. All off today.
+security_defaults:
+  dependabot_alerts: false
+  secret_scanning: false
+  secret_scanning_push_protection: false
+  advanced_security: false
+
+# GitHub Free. Not a setting but a constraint: rulesets are applied per
+# repository rather than once at the organisation, and private repositories
+# cannot carry a ruleset at all.
+plan: free
