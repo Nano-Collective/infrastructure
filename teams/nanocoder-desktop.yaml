@@ -1,0 +1,12 @@
+# Created by hand against the live organisation on 2026-10-22, before this file
+# existed, which is the wrong order and the reason for the import block in
+# tofu/imports.tf. The team holds one repository because that was the whole
+# request: desktop access, not the rest of the catalogue.
+slug: nanocoder-desktop
+name: "nanocoder-desktop"
+description: "Nanocoder Desktop contributors"
+privacy: closed
+parent: null
+
+repositories:
+  nanocoder-desktop: push

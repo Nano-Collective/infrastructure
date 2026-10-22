@@ -1,0 +1,10 @@
+# Added to nanocoder-desktop on 2026-10-22. Accepted the invitation before the
+# catalogue named them, so github_membership adopts an active membership rather
+# than creating one.
+github: puri-adityakumar
+name: Aditya Kumar Puri
+org_role: member
+
+teams:
+  - team: nanocoder-desktop
+    role: member
