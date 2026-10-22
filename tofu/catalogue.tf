@@ -59,15 +59,29 @@ locals {
 
   # Inverted from people/, so that a person's file is the single place their
   # access is written down and the team file does not have to repeat it.
+  #
+  # lower() because github_team_members reads a login back lowercased while
+  # person.github holds it as GitHub spells it, and the provider compares the
+  # two as plain strings. A login with capitals therefore plans forever: the
+  # apply writes `addyCooks`, the next read returns `addycooks`, and the
+  # difference is a remove-and-add that applies cleanly and changes nothing.
+  # That is what the 2026-10-22 apply hit -- it succeeded, and the plan after
+  # it still wanted one change.
+  #
+  # Lowering here rather than in the YAML keeps `github:` canonical, which is
+  # what schema/person.schema.json asks for and what github_membership and the
+  # read-back both want. GitHub logins are case-insensitive, so this narrows
+  # nothing. `Avtrkrb` is the only other capitalised login and is in no team;
+  # without this, adding them to one would reopen the same loop.
   team_members = {
     for slug, team in local.teams : slug => {
       members = [
-        for login, person in local.people : login
+        for login, person in local.people : lower(login)
         if contains([for t in try(person.teams, []) : t.team], slug)
         && [for t in person.teams : t.role if t.team == slug][0] == "member"
       ]
       maintainers = [
-        for login, person in local.people : login
+        for login, person in local.people : lower(login)
         if contains([for t in try(person.teams, []) : t.team], slug)
         && [for t in person.teams : t.role if t.team == slug][0] == "maintainer"
       ]
