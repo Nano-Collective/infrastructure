@@ -15,15 +15,20 @@
 variable "bootstrap" {
   description = <<-EOT
     Arms the import blocks in this file. True for the first apply and the first
-    apply only.
+    apply only, which has happened: sixty-three objects on 2026-10-21, then this
+    repository itself in the pull request after it.
 
     While it is on the catalogue can record what already exists but cannot add
     anything: a newly named repository, person or team grant has nothing to
     import and the plan fails with "Cannot import non-existent remote object".
-    Turn it off in the pull request after the import has been applied.
+    That is what it is now off for. It does not get turned back on to import
+    something new -- a new repository is created by an apply, not imported, and
+    arming this again would break every addition in the catalogue until it was
+    turned off a second time. To adopt something that already exists by hand,
+    arm it in its own pull request, apply, and disarm in the next one.
   EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "import_ruleset_ids" {
