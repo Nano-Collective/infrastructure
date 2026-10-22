@@ -97,3 +97,21 @@ import {
   to       = github_membership.this[each.key]
   id       = "${var.organisation}:${each.key}"
 }
+
+# --------------------------------------------- adopting nanocoder-desktop --
+#
+# Not gated on var.bootstrap, and deliberately not. That variable is for the one
+# first apply and says so; arming it again to pick up a single team would break
+# every addition made to the catalogue since. This is the narrow form its own
+# documentation asks for instead -- "arm it in its own pull request, apply, and
+# disarm in the next one" -- scoped to the one object that actually conflicts.
+#
+# Only the team needs it. github_team_repository, github_team_members and
+# github_membership all write with PUT and reconcile an existing grant or
+# membership without an import; github_team would 422.
+#
+# Delete this block in the pull request after the apply that uses it.
+import {
+  to = github_team.root["nanocoder-desktop"]
+  id = "20259972"
+}
