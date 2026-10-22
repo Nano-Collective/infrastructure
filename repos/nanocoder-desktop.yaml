@@ -1,0 +1,53 @@
+# Written by hand, not imported: this repository does not exist yet, so this
+# file creates it. Its whitepaper reads "Build approved" in the docs manifest,
+# which is the gate a new repository has to pass.
+name: nanocoder-desktop
+description: "A local-first desktop workspace for durable project chats, file browsing, Git review, terminal work, and an isolated agent-controlled browser around Nanocoder's existing agent."
+# No page on the docs site yet. A link to a 404 is worse than no link; fill
+# this in when one exists.
+homepage: null
+visibility: public
+archived: false
+vulnerability_alerts: true
+default_branch: main
+
+topics:
+  - ai-agents
+  - coding-agents
+  - desktop
+  - local-first
+  - nanocoder
+
+features:
+  issues: true
+  projects: false
+  wiki: false
+  discussions: false
+
+merge:
+  squash: true
+  merge_commit: false
+  rebase: false
+  auto_merge: false
+  delete_branch_on_merge: true
+
+# At evaluate, per CONTRIBUTING.md: read a day of rule-suite results, then flip
+# to active in a second pull request. Nothing reports yet in a repository with
+# no commits in it.
+rulesets:
+  quality:
+    enforcement: evaluate
+  review:
+    enforcement: evaluate
+    copilot_code_review: true
+
+# Off for the first apply, and not for the usual reason: there are no labels
+# here to fold in yet, but GitHub gives every new repository its nine default
+# labels, and `base` in org/labels.yaml reproduces all nine. The provider's
+# create path calls CreateLabel and returns whatever comes back, so each of the
+# nine would answer 422 already_exists partway through the apply, after the
+# repository and its rulesets had been made. Turn this on in a second pull
+# request, once the labels exist to be imported or deleted.
+manage_labels: false
+
+whitepaper: nanocoder-desktop
