@@ -1,0 +1,22 @@
+# Missed by scripts/import-from-live.sh: every other organisation member got a
+# file in the first import, this one did not, and nothing since has added it.
+# github_team_members is authoritative per team, so the first apply on
+# 2026-10-21 read core-team as the two people the catalogue named and removed
+# the third. The organisation membership survived -- it was never in state, so
+# there was nothing to destroy -- which is why they stayed a member of the
+# organisation while losing maintain on all ten of core-team's repositories.
+#
+# Declaring them here restores that. github_membership writes with PUT and
+# adopts the active membership rather than creating one, as it did for
+# puri-adityakumar, so no import block is needed.
+#
+# `member` rather than `maintainer`: the team role governs who administers the
+# team, not what they can merge. Merge rights come from core-team's own
+# maintain grant in teams/core-team.yaml, which is the access that was lost.
+github: addyCooks
+name: Aditya Mishra
+org_role: member
+
+teams:
+  - team: core-team
+    role: member
