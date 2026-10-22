@@ -1,0 +1,44 @@
+# Written by hand from what the API returns for this repository today, not from
+# what it ought to be. It is being imported, not created: a description or a
+# merge setting that does not match live is a change smuggled into a recording,
+# and the plan for this pull request has to be sixty-three imports plus one.
+#
+# Deliberately absent until now. The repository has to exist before CI can run
+# at all, so it could not be added while a file for a missing repository would
+# have made the first plan non-empty. It is recorded here while the import is
+# still armed, which is the only window in which recording it works.
+name: infrastructure
+description: "Infrastructure as code for the Nano Collective GitHub organisation"
+homepage: null
+visibility: public
+archived: false
+vulnerability_alerts: true
+default_branch: main
+
+topics: []
+
+features:
+  issues: true
+  projects: true
+  wiki: true
+  discussions: false
+
+merge:
+  squash: true
+  merge_commit: true
+  rebase: true
+  auto_merge: false
+  delete_branch_on_merge: false
+
+# None today, which is worth saying out loud rather than leaving implied: the
+# repository that decides who can do what across the organisation is the one
+# repository with no ruleset on it. Adding one is an addition, so it cannot ride
+# along here -- it comes after the import is disarmed, on its own plan.
+rulesets: {}
+
+# Labels stay unmanaged until the existing set in this repo has been folded
+# into org/labels.yaml. Flipping this on before that happens deletes the rest.
+manage_labels: false
+
+whitepaper: null
+whitepaper_exempt: infrastructure
