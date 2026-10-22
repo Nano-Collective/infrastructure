@@ -165,7 +165,12 @@ try {
       const want = teams.find((x) => x.slug === t.slug);
       if (!want) continue;
       const expected = want.repositories?.[r.name] ?? want.all_repositories ?? null;
-      if (expected && expected !== r.role_name) {
+      // The catalogue spells permissions the way the API writes them and the
+      // schema accepts: pull/push. role_name reads them back the way the web UI
+      // says them: read/write. triage, maintain and admin are the same word in
+      // both, which is why ten maintain grants never caught this.
+      const asRoleName = { pull: "read", push: "write" };
+      if (expected && (asRoleName[expected] ?? expected) !== r.role_name) {
         fail(`${t.slug} holds "${r.role_name}" on ${r.name}; teams/${t.slug}.yaml says "${expected}".`);
       }
     }
