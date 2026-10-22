@@ -76,6 +76,28 @@ fi
 # that only reads *.tf is one rename away from seeing nothing.
 tf_src=(--include='*.tf' --include='*.tf.json' --include='*.tofu' --include='*.tofu.json')
 
+# Every gate from here down is written in HCL's spelling: `base_url =`,
+# `provider "github"`, `source = "./x"`. OpenTofu reads *.tf.json and
+# *.tofu.json too, where those are written `"base_url":`, `"provider": [...]`
+# and `"source":` -- and a grep for the HCL form sees none of it. A branch could
+# otherwise add tofu/providers.tf.json, point base_url at another host, and walk
+# past the redirect check below with the plan job's App token.
+#
+# Rather than teach every gate two spellings, the JSON form is refused outright.
+# Nothing here uses it. If that ever has to change, every check below learns the
+# JSON spelling in the same pull request, not afterwards.
+#
+# tofu/import-ids.auto.tfvars.json is a variables file, not configuration, and
+# does not match either pattern.
+json_cfg=$(find "$ROOT/tofu" -type f \( -name '*.tf.json' -o -name '*.tofu.json' \) \
+  -not -path '*/.terraform/*' 2>/dev/null || true)
+if [ -n "$json_cfg" ]; then
+  echo "$json_cfg" | sed 's/^/      /' >&2
+  fail "a JSON-form OpenTofu configuration file is present. Every check in this file is written in HCL's spelling and cannot see inside these. Use .tf instead."
+else
+  pass "no JSON-form configuration, so the HCL spellings below are the whole surface"
+fi
+
 # A plan executes the configuration, so a provisioner or an external data source
 # would run code on the runner with whatever the plan job holds. Nothing here
 # needs any of them. Both the HCL and the JSON spelling of each.
